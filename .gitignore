@@ -206,3 +206,6 @@ ddpm-out/*
 !ddpm-out/unet/
 ddpm-out/unet/*
 !ddpm-out/unet/.gitkeep
+!ddpm-out/scheduler/
+ddpm-out/scheduler/*
+!ddpm-out/scheduler/.gitkeep
