@@ -15,14 +15,18 @@ setup:
     # P0-12 belt-and-suspenders: a stray egg-info makes the workload's own
     # package get re-pinned from PyPI.
     rm -rf *.egg-info src/*.egg-info
-    # ---- pin roar to 0.4.4.dev0 @ 4eaefc0 --------------------------------
-    # Needed by this row specifically: #264 attributes imported packages by
+    # ---- pin roar to 0.4.4.dev0 @ c5c553b --------------------------------
+    # Needed by this row specifically. #264 attributes imported packages by
     # NAME, so `wandb` (aliased to trackio by --wandb-to-trackio) finally
-    # lands in the freeze. Under 0.4.3 it did not, and the row gated green
-    # while being impossible to rebuild.
+    # lands in the freeze; under 0.4.3 it did not and the row gated green
+    # while being impossible to rebuild. c5c553b adds P0-13: the name pass no
+    # longer attributes *probed* optional imports, so the AMI's sagemaker-*
+    # (reached via accelerate's `import sagemaker` probe) and 12 other
+    # substrate pins stay out of the freeze. With them in, the pin set was
+    # unsatisfiable as a set and the cold rebuild died at env setup.
     # sha256 is the ONLY build identity - the version string 0.4.4.dev0 is
     # shared by several distinct builds, one of which ships NO tracer.
-    ROAR_SHA256=f06a12710342363710ac5a1a8c5f70d4b40c2c3340a2e422b4fcfe8f92bd2c97
+    ROAR_SHA256=a5bcde02f6a1f7bfa29ee52044f69fb72a87a1f3b6867db6911e8e82749415f0
     test -n "$ROAR_WHEEL_URL" || { echo "FATAL: ROAR_WHEEL_URL secret not set"; exit 1; }
     curl -fsSL "$ROAR_WHEEL_URL" -o /tmp/roar_cli-0.4.4.dev0-cp310-abi3-linux_x86_64.whl
     echo "$ROAR_SHA256  /tmp/roar_cli-0.4.4.dev0-cp310-abi3-linux_x86_64.whl" | sha256sum -c - \
