@@ -6,11 +6,45 @@ name: diffusers-uncond reproduction
 
 secrets:
   - HF_TOKEN            # wandb->trackio sync + roar put upload
+  - ROAR_WHEEL_URL      # presigned URL for the pinned roar build (see setup)
 
 setup:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
     python -m pip install --quiet requests || true
+    # P0-12 belt-and-suspenders: a stray egg-info makes the workload's own
+    # package get re-pinned from PyPI.
+    rm -rf *.egg-info src/*.egg-info
+    # ---- pin roar to 0.4.4.dev0 @ 4eaefc0 --------------------------------
+    # Needed by this row specifically: #264 attributes imported packages by
+    # NAME, so `wandb` (aliased to trackio by --wandb-to-trackio) finally
+    # lands in the freeze. Under 0.4.3 it did not, and the row gated green
+    # while being impossible to rebuild.
+    # sha256 is the ONLY build identity - the version string 0.4.4.dev0 is
+    # shared by several distinct builds, one of which ships NO tracer.
+    ROAR_SHA256=f06a12710342363710ac5a1a8c5f70d4b40c2c3340a2e422b4fcfe8f92bd2c97
+    test -n "$ROAR_WHEEL_URL" || { echo "FATAL: ROAR_WHEEL_URL secret not set"; exit 1; }
+    curl -fsSL "$ROAR_WHEEL_URL" -o /tmp/roar_cli-0.4.4.dev0-cp310-abi3-linux_x86_64.whl
+    echo "$ROAR_SHA256  /tmp/roar_cli-0.4.4.dev0-cp310-abi3-linux_x86_64.whl" | sha256sum -c - \
+      || { echo "FATAL: wheel sha256 mismatch - refusing to install"; exit 1; }
+    # P0-7: hosts reliably carry TWO stale dists (0.4.0 owning the PATH
+    # binary, 0.4.3 under /opt/pytorch) and a leftover dist-info can win a
+    # --force-reinstall. Purge every one before installing.
+    for sp in $(python -c "import site;print(' '.join(site.getsitepackages()))"); do
+      rm -rf "$sp"/roar*.dist-info "$sp"/roar_cli*.dist-info
+    done
+    python -m pip uninstall -y roar-cli >/dev/null 2>&1 || true
+    python -m pip install --quiet --force-reinstall \
+      /tmp/roar_cli-0.4.4.dev0-cp310-abi3-linux_x86_64.whl
+    # assert the build we actually got
+    roar --version
+    roar --version | grep -q '0\.4\.4\.dev0' \
+      || { echo "FATAL: wrong roar version after install"; exit 1; }
+    ROAR_BIN_DIR=$(python -c "import roar,os;print(os.path.join(os.path.dirname(roar.__file__),'bin'))")
+    echo "--- roar/bin/ (P0-10: must be 6 artefacts, not 0) ---"; ls -1 "$ROAR_BIN_DIR"
+    test "$(ls -1 "$ROAR_BIN_DIR" | wc -l)" -ge 6 \
+      || { echo "FATAL: tracerless wheel (P0-10)"; exit 1; }
+    # ----------------------------------------------------------------------
     # examples/unconditional_image_generation/requirements.txt + what it omits.
     # NOTE: diffusers itself is NOT installed. The example pins
     # check_min_version("0.40.0.dev0") and no such release exists on PyPI (latest
